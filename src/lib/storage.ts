@@ -3,6 +3,9 @@ import { EventPlan } from "@/types/event";
 const STORAGE_KEY = "momentmint_saved_events";
 const CURRENT_ACTIVE_KEY = "momentmint_active_event_id";
 const API_KEY_STORAGE = "momentmint_custom_gemini_key";
+const MODEL_STORAGE_KEY = "momentmint_custom_gemini_model";
+const LEGACY_MODEL_KEYS = ["gemini_model", "momentmint_model", "selected_gemini_model"];
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 export function getStoredApiKey(): string {
   if (typeof window === "undefined") return "";
@@ -23,6 +26,60 @@ export function setStoredApiKey(key: string): void {
     }
   } catch (err) {
     console.error("Failed to store API key:", err);
+  }
+}
+
+export function getStoredModel(): string {
+  if (typeof window === "undefined") return DEFAULT_GEMINI_MODEL;
+  try {
+    let stored = localStorage.getItem(MODEL_STORAGE_KEY);
+    if (!stored) {
+      for (const k of LEGACY_MODEL_KEYS) {
+        const val = localStorage.getItem(k);
+        if (val) {
+          stored = val;
+          break;
+        }
+      }
+    }
+
+    if (!stored || typeof stored !== "string") {
+      return DEFAULT_GEMINI_MODEL;
+    }
+
+    const trimmed = stored.trim();
+    // Obsolete model check: safely migrate away from 2.5
+    if (
+      trimmed === "gemini-2.5-flash" ||
+      trimmed === "models/gemini-2.5-flash" ||
+      trimmed.includes("2.5")
+    ) {
+      setStoredModel(DEFAULT_GEMINI_MODEL);
+      return DEFAULT_GEMINI_MODEL;
+    }
+
+    return trimmed || DEFAULT_GEMINI_MODEL;
+  } catch {
+    return DEFAULT_GEMINI_MODEL;
+  }
+}
+
+export function setStoredModel(model: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const trimmed = (model || "").trim();
+    if (
+      !trimmed ||
+      trimmed === "gemini-2.5-flash" ||
+      trimmed === "models/gemini-2.5-flash" ||
+      trimmed.includes("2.5")
+    ) {
+      localStorage.setItem(MODEL_STORAGE_KEY, DEFAULT_GEMINI_MODEL);
+    } else {
+      localStorage.setItem(MODEL_STORAGE_KEY, trimmed);
+    }
+  } catch (err) {
+    console.error("Failed to store Gemini model:", err);
   }
 }
 

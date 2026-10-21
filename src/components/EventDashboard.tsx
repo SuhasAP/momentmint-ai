@@ -50,6 +50,7 @@ interface EventDashboardProps {
   onDuplicatePlan: (id: string) => void;
   onOpenPrint: () => void;
   customApiKey?: string;
+  customModel?: string;
 }
 
 export const EventDashboard: React.FC<EventDashboardProps> = ({
@@ -59,6 +60,7 @@ export const EventDashboard: React.FC<EventDashboardProps> = ({
   onDuplicatePlan,
   onOpenPrint,
   customApiKey,
+  customModel,
 }) => {
   const [activeTab, setActiveTab] = useState<
     "overview" | "itinerary" | "budget" | "menu" | "checklist" | "vendors"
@@ -1296,6 +1298,7 @@ export const EventDashboard: React.FC<EventDashboardProps> = ({
         currentPlan={plan}
         onApplyChanges={(updated) => onUpdatePlan(updated)}
         customApiKey={customApiKey}
+        customModel={customModel}
       />
 
       {/* Cost Optimizer Modal */}

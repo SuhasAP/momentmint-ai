@@ -172,4 +172,5 @@ export const CopilotRequestSchema = z.object({
   currentPlan: EventPlanSchema,
   userInstruction: z.string().min(3, "Please enter a specific instruction or question for the copilot"),
   apiKey: z.string().optional(),
+  model: z.string().optional(),
 });

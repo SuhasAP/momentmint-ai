@@ -15,6 +15,8 @@ import {
   deleteEvent,
   duplicateEvent,
   getStoredApiKey,
+  getStoredModel,
+  DEFAULT_GEMINI_MODEL,
 } from "@/lib/storage";
 import { SAMPLE_PRESETS, generateFallbackPlan } from "@/lib/sample-data";
 
@@ -27,6 +29,7 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [initialPreset, setInitialPreset] = useState<EventInput | null>(null);
   const [customApiKey, setCustomApiKey] = useState("");
+  const [customModel, setCustomModel] = useState(DEFAULT_GEMINI_MODEL);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Initialize from storage on client mount
@@ -35,15 +38,22 @@ export default function Home() {
     setSavedEvents(events);
     const key = getStoredApiKey();
     setCustomApiKey(key);
+    const m = getStoredModel();
+    setCustomModel(m);
 
     if (events.length > 0) {
       setActivePlan(events[0]);
     }
   }, []);
 
-  const handleKeyUpdated = (hasKey: boolean) => {
+  const handleKeyUpdated = (hasKey: boolean, model?: string) => {
     const key = getStoredApiKey();
     setCustomApiKey(key);
+    if (model) {
+      setCustomModel(model);
+    } else {
+      setCustomModel(getStoredModel());
+    }
   };
 
   const handleStartPlanning = (preset?: EventInput) => {
@@ -67,7 +77,11 @@ export default function Home() {
       const response = await fetch("/api/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, apiKey: customApiKey }),
+        body: JSON.stringify({
+          input,
+          apiKey: customApiKey,
+          model: customModel || getStoredModel(),
+        }),
       });
 
       const data = await response.json();
@@ -182,6 +196,7 @@ export default function Home() {
             onDuplicatePlan={handleDuplicatePlan}
             onOpenPrint={() => setIsPrintOpen(true)}
             customApiKey={customApiKey}
+            customModel={customModel}
           />
         ) : (
           <HeroLanding

@@ -5,7 +5,7 @@ import { generateGeminiEventPlan, sanitizeErrorMessage } from "@/lib/gemini";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { input, apiKey } = body;
+    const { input, apiKey, model } = body;
 
     const validationResult = EventInputSchema.safeParse(input);
     if (!validationResult.success) {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const plan = await generateGeminiEventPlan(validationResult.data, apiKey);
+    const plan = await generateGeminiEventPlan(validationResult.data, apiKey, model);
     return NextResponse.json({ success: true, plan });
   } catch (error) {
     const safeMsg = sanitizeErrorMessage((error as Error).message || "Unknown error occurred");

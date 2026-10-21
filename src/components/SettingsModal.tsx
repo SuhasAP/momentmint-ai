@@ -2,12 +2,18 @@
 
 import React, { useState, useEffect } from "react";
 import { X, Key, ExternalLink, CheckCircle2, ShieldCheck, Cpu } from "lucide-react";
-import { getStoredApiKey, setStoredApiKey } from "@/lib/storage";
+import {
+  getStoredApiKey,
+  setStoredApiKey,
+  getStoredModel,
+  setStoredModel,
+  DEFAULT_GEMINI_MODEL,
+} from "@/lib/storage";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onKeyUpdated: (hasKey: boolean) => void;
+  onKeyUpdated: (hasKey: boolean, model?: string) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -16,12 +22,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onKeyUpdated,
 }) => {
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("gemini-3.8-flash");
+  const [model, setModel] = useState(DEFAULT_GEMINI_MODEL);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setApiKey(getStoredApiKey());
+      setModel(getStoredModel());
       setSavedSuccess(false);
     }
   }, [isOpen]);
@@ -30,8 +37,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSave = () => {
     setStoredApiKey(apiKey.trim());
+    setStoredModel(model);
     setSavedSuccess(true);
-    onKeyUpdated(apiKey.trim().length > 0);
+    onKeyUpdated(apiKey.trim().length > 0, model);
     setTimeout(() => {
       setSavedSuccess(false);
       onClose();
@@ -41,7 +49,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleClear = () => {
     setApiKey("");
     setStoredApiKey("");
-    onKeyUpdated(false);
+    onKeyUpdated(false, model);
   };
 
   return (
@@ -112,9 +120,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 className="w-full px-3.5 py-2.5 bg-[#F8F6F0] border border-[#E7E3D9] rounded-xl text-sm font-medium text-[#17372B] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#214737]"
               >
                 <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended - Fastest & High Quality)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Supported General Purpose)</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (General Purpose)</option>
               </select>
             </div>
           </div>
@@ -156,7 +163,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <span>Saved!</span>
               </>
             ) : (
-              <span>Save & Connect</span>
+              <span>Save Settings</span>
             )}
           </button>
         </div>

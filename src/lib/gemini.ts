@@ -3,7 +3,43 @@ import { EventInput, EventPlan, CopilotDiff, BudgetItem, BudgetBreakdown } from 
 import { EventPlanSchema } from "@/lib/schemas";
 import { generateFallbackPlan } from "@/lib/sample-data";
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+export const DEFAULT_MODEL = "gemini-3.8-flash";
+
+export function resolveGeminiModel(customModel?: string): string {
+  // 1. Check custom model passed from client request / storage
+  if (customModel && typeof customModel === "string") {
+    const trimmed = customModel.trim();
+    if (trimmed.length > 0) {
+      // Obsolete model migration: if old 2.5 is supplied, upgrade to 3.8
+      if (
+        trimmed === "gemini-2.5-flash" ||
+        trimmed === "models/gemini-2.5-flash" ||
+        trimmed.includes("2.5")
+      ) {
+        return DEFAULT_MODEL;
+      }
+      return trimmed;
+    }
+  }
+
+  // 2. Check process.env.GEMINI_MODEL override
+  const envModel = process.env.GEMINI_MODEL?.trim();
+  if (envModel) {
+    // If environment variable is set to the obsolete 2.5 model, upgrade to 3.8
+    if (
+      envModel === "gemini-2.5-flash" ||
+      envModel === "models/gemini-2.5-flash" ||
+      envModel.includes("2.5")
+    ) {
+      return DEFAULT_MODEL;
+    }
+    return envModel;
+  }
+
+  // 3. Fallback default
+  return DEFAULT_MODEL;
+}
+
 const API_TIMEOUT_MS = 25000;
 
 function getApiKey(customKey?: string): string | undefined {
@@ -100,7 +136,8 @@ CRITICAL PRINCIPLES:
 
 export async function generateGeminiEventPlan(
   input: EventInput,
-  customApiKey?: string
+  customApiKey?: string,
+  customModel?: string
 ): Promise<EventPlan> {
   const apiKey = getApiKey(customApiKey);
   const startTime = Date.now();
@@ -112,7 +149,7 @@ export async function generateGeminiEventPlan(
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const modelName = DEFAULT_MODEL;
+  const modelName = resolveGeminiModel(customModel);
 
   const userPrompt = `
 Generate a comprehensive, complete event plan in JSON for this celebration:
@@ -258,7 +295,8 @@ Make sure all itemized estimatedCost numbers are integers and their sum equals e
 export async function generateGeminiCopilotDiff(
   currentPlan: EventPlan,
   userInstruction: string,
-  customApiKey?: string
+  customApiKey?: string,
+  customModel?: string
 ): Promise<CopilotDiff> {
   const apiKey = getApiKey(customApiKey);
 
@@ -267,7 +305,7 @@ export async function generateGeminiCopilotDiff(
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const modelName = DEFAULT_MODEL;
+  const modelName = resolveGeminiModel(customModel);
 
   const prompt = `
 You are the MOMENTMINT AI Event Copilot. The user wants to adjust their existing event plan.

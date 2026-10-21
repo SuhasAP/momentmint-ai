@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { EventPlan, CopilotDiff } from "@/types/event";
 import { formatCurrency } from "@/lib/budget-math";
+import { getStoredModel } from "@/lib/storage";
 
 interface CopilotDrawerProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ interface CopilotDrawerProps {
   currentPlan: EventPlan;
   onApplyChanges: (updatedPlan: EventPlan) => void;
   customApiKey?: string;
+  customModel?: string;
 }
 
 const QUICK_PROMPTS = [
@@ -39,6 +41,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
   currentPlan,
   onApplyChanges,
   customApiKey,
+  customModel,
 }) => {
   const [instruction, setInstruction] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -55,6 +58,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
     setError(null);
 
     try {
+      const activeModel = customModel || getStoredModel();
       const res = await fetch("/api/copilot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -62,6 +66,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
           currentPlan,
           userInstruction: promptText,
           apiKey: customApiKey,
+          model: activeModel,
         }),
       });
 

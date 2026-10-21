@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { currentPlan, userInstruction, apiKey } = validationResult.data;
-    const diff = await generateGeminiCopilotDiff(currentPlan, userInstruction, apiKey);
+    const { currentPlan, userInstruction, apiKey, model } = validationResult.data;
+    const diff = await generateGeminiCopilotDiff(currentPlan, userInstruction, apiKey, model);
 
     return NextResponse.json({ success: true, diff });
   } catch (error) {
