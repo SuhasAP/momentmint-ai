@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { EventInputSchema, EventPlanSchema } from "../src/lib/schemas";
 import { generateFallbackPlan } from "../src/lib/sample-data";
+import { sanitizeErrorMessage } from "../src/lib/gemini";
 import { EventInput } from "../src/types/event";
 
 describe("Schema Validation & Constraint Handling", () => {
@@ -50,5 +51,12 @@ describe("Schema Validation & Constraint Handling", () => {
     expect(result.success).toBe(true);
     expect(plan.aiMetadata.isMockFallback).toBe(true);
     expect(plan.budgetBreakdown.items.length).toBeGreaterThan(3);
+  });
+
+  it("redacts Google API keys and query parameter credentials from error messages", () => {
+    const rawError = "GoogleGenerativeAI Error: 400 at https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyA_sample_dummy_key_1234567890123";
+    const scrubbed = sanitizeErrorMessage(rawError);
+    expect(scrubbed).not.toContain("AIzaSyA_sample_dummy_key_1234567890123");
+    expect(scrubbed).toContain("key=[REDACTED]");
   });
 });

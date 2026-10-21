@@ -30,24 +30,27 @@ export const Header: React.FC<HeaderProps> = ({
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 bg-[#FAF9F5]/90 backdrop-blur-md border-b border-[#EFECE1]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
-        {/* Brand identity */}
-        <div className="flex items-center space-x-3 cursor-pointer" onClick={onNewEvent}>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-rose-500 flex items-center justify-center text-white shadow-md shadow-violet-500/20">
-            <Sparkles className="w-5 h-5 text-white" />
+    <header className="sticky top-0 z-40 bg-[#F8F6F0]/90 backdrop-blur-md border-b border-[#E7E3D9]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+        {/* Brand identity - Boutique Editorial Event Studio */}
+        <div
+          className="flex items-center space-x-3.5 cursor-pointer group"
+          onClick={onNewEvent}
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#17372B] border border-[#E9DFC9]/40 flex items-center justify-center text-[#E9DFC9] shadow-sm transition-transform group-hover:scale-105">
+            <Sparkles className="w-5 h-5 text-[#E9DFC9]" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-serif tracking-tight text-xl font-bold text-slate-900">
+              <span className="font-serif tracking-tight text-2xl font-bold text-[#17372B]">
                 MOMENTMINT
               </span>
-              <span className="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600 to-rose-500 text-white shadow-sm">
-                AI
+              <span className="text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full bg-[#DCE5D8] text-[#17372B] border border-[#C4D4BE]">
+                STUDIO AI
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium hidden sm:block">
-              Big moments. Brilliantly planned.
+            <p className="text-[11px] text-[#697168] font-medium tracking-wide hidden sm:block">
+              Bespoke Celebrations. Brilliantly Planned.
             </p>
           </div>
         </div>
@@ -57,52 +60,54 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Engine indicator */}
           <button
             onClick={onOpenSettings}
-            className={`hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+            className={`hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
               apiKeyConfigured
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
+                ? "bg-[#DCE5D8]/80 text-[#17372B] border-[#C4D4BE] hover:bg-[#DCE5D8]"
+                : "bg-[#FAF7F1] text-[#697168] border-[#E7E3D9] hover:bg-[#F0ECE1]"
             }`}
-            title="Configure Gemini API Key"
+            title="Configure Google Gemini API Key"
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                apiKeyConfigured ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                apiKeyConfigured ? "bg-[#214737] animate-pulse" : "bg-[#C87960]"
               }`}
             />
-            <span>{apiKeyConfigured ? "Gemini 2.5 Active" : "Demo Engine (Add Key)"}</span>
+            <span className="tracking-wide">
+              {apiKeyConfigured ? "Gemini 2.5 Active" : "Demo Sandbox (Add Key)"}
+            </span>
           </button>
 
           {/* Saved Events Dropdown */}
           <div className="relative">
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-700 bg-white border border-[#EFECE1] hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-[#222820] bg-white border border-[#E7E3D9] hover:bg-[#FAF7F1] hover:border-[#D8C7A5] transition-all shadow-subtle"
               aria-label="View Saved Events"
             >
-              <Calendar className="w-4 h-4 text-violet-600" />
-              <span className="hidden sm:inline">Saved Plans</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-[11px] font-bold text-slate-600">
+              <Calendar className="w-4 h-4 text-[#214737]" />
+              <span className="hidden sm:inline font-sans">Dossiers</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-[#F0ECE1] text-[11px] font-bold text-[#17372B]">
                 {savedEvents.length}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronDown className="w-3.5 h-3.5 text-[#697168]" />
             </button>
 
             {dropdownOpen && (
               <div
-                className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-fade-in"
+                className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-elevated border border-[#E7E3D9] py-2.5 z-50 animate-fade-in"
                 onMouseLeave={() => setDropdownOpen(false)}
               >
-                <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Your Saved Celebrations
+                <div className="px-4 py-2 border-b border-[#E7E3D9]/60 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#697168] uppercase tracking-widest">
+                    Your Curated Events
                   </span>
-                  <span className="text-xs text-slate-400">{savedEvents.length} total</span>
+                  <span className="text-xs text-[#697168]">{savedEvents.length} total</span>
                 </div>
 
-                <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+                <div className="max-h-72 overflow-y-auto divide-y divide-[#E7E3D9]/40">
                   {savedEvents.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-slate-500">
-                      No saved events yet. Generate your first plan to save!
+                    <div className="p-5 text-center text-xs text-[#697168]">
+                      No event dossiers saved yet. Generate your first plan to begin.
                     </div>
                   ) : (
                     savedEvents.map((evt) => {
@@ -110,8 +115,8 @@ export const Header: React.FC<HeaderProps> = ({
                       return (
                         <div
                           key={evt.id}
-                          className={`px-3 py-2.5 flex items-center justify-between hover:bg-slate-50 transition-colors ${
-                            isActive ? "bg-violet-50/70" : ""
+                          className={`px-3.5 py-3 flex items-center justify-between hover:bg-[#F8F6F0] transition-colors ${
+                            isActive ? "bg-[#DCE5D8]/40" : ""
                           }`}
                         >
                           <div
@@ -122,12 +127,12 @@ export const Header: React.FC<HeaderProps> = ({
                             }}
                           >
                             <div className="flex items-center space-x-2">
-                              {isActive && <Check className="w-3.5 h-3.5 text-violet-600 flex-shrink-0" />}
-                              <p className="text-sm font-semibold text-slate-800 truncate">
+                              {isActive && <Check className="w-3.5 h-3.5 text-[#214737] flex-shrink-0" />}
+                              <p className="text-sm font-bold text-[#222820] truncate font-serif">
                                 {evt.title}
                               </p>
                             </div>
-                            <p className="text-xs text-slate-500 mt-0.5">
+                            <p className="text-xs text-[#697168] mt-0.5 font-sans">
                               {evt.input.city} • {evt.input.guestCount} guests • {evt.budgetBreakdown.currency}{" "}
                               {evt.budgetBreakdown.totalBudget.toLocaleString()}
                             </p>
@@ -139,8 +144,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 e.stopPropagation();
                                 onDuplicateEvent(evt.id);
                               }}
-                              className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                              title="Duplicate plan"
+                              className="p-1.5 rounded-lg text-[#697168] hover:text-[#222820] hover:bg-[#E9DFC9]/50 transition-colors"
+                              title="Duplicate dossier"
                             >
                               <Copy className="w-3.5 h-3.5" />
                             </button>
@@ -149,8 +154,8 @@ export const Header: React.FC<HeaderProps> = ({
                                 e.stopPropagation();
                                 onDeleteEvent(evt.id);
                               }}
-                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                              title="Delete plan"
+                              className="p-1.5 rounded-lg text-[#697168] hover:text-[#C87960] hover:bg-[#FAF1EE] transition-colors"
+                              title="Delete dossier"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -164,35 +169,35 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Print / Export button if active plan */}
+          {/* Export button if active plan */}
           {activeEvent && (
             <button
               onClick={onOpenPrint}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-700 bg-white border border-[#EFECE1] hover:bg-slate-50 transition-all shadow-sm"
-              title="Print or Export PDF"
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-[#222820] bg-white border border-[#E7E3D9] hover:bg-[#FAF7F1] transition-all shadow-subtle"
+              title="Print or Export PDF Dossier"
             >
-              <FileText className="w-4 h-4 text-slate-600" />
-              <span className="hidden md:inline">Export</span>
+              <FileText className="w-4 h-4 text-[#214737]" />
+              <span className="hidden md:inline font-sans">Export</span>
             </button>
           )}
 
           {/* Settings / API Key */}
           <button
             onClick={onOpenSettings}
-            className="p-2 rounded-lg text-slate-600 bg-white border border-[#EFECE1] hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
+            className="p-2.5 rounded-xl text-[#222820] bg-white border border-[#E7E3D9] hover:bg-[#FAF7F1] hover:border-[#D8C7A5] transition-all shadow-subtle"
             aria-label="Settings and API Key"
             title="Settings and API Key"
           >
-            <Key className="w-4 h-4 text-slate-600" />
+            <Key className="w-4 h-4 text-[#214737]" />
           </button>
 
           {/* New Event Button */}
           <button
             onClick={onNewEvent}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-all shadow-sm hover:shadow"
+            className="flex items-center space-x-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-[#E9DFC9] bg-[#17372B] hover:bg-[#214737] border border-[#E9DFC9]/30 transition-all shadow-sm hover:shadow"
           >
-            <Plus className="w-4 h-4" />
-            <span>New Plan</span>
+            <Plus className="w-4 h-4 text-[#E9DFC9]" />
+            <span className="font-sans">Plan Event</span>
           </button>
         </div>
       </div>

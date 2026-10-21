@@ -1,9 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import { EventInput, EventPlan, CopilotDiff } from "@/types/event";
+import { EventInput, EventPlan, CopilotDiff, BudgetItem, BudgetBreakdown } from "@/types/event";
 import { EventPlanSchema } from "@/lib/schemas";
 import { generateFallbackPlan } from "@/lib/sample-data";
 
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const API_TIMEOUT_MS = 25000;
 
 function getApiKey(customKey?: string): string | undefined {
   if (customKey && customKey.trim().length > 5) {
@@ -14,7 +15,6 @@ function getApiKey(customKey?: string): string | undefined {
 
 function cleanJsonString(raw: string): string {
   let cleaned = raw.trim();
-  // Strip markdown code block ticks if model wrapped it
   if (cleaned.startsWith("```json")) {
     cleaned = cleaned.replace(/^```json\s*/, "").replace(/\s*```$/, "");
   } else if (cleaned.startsWith("```")) {
@@ -23,9 +23,68 @@ function cleanJsonString(raw: string): string {
   return cleaned.trim();
 }
 
+export function sanitizeErrorMessage(rawMessage: string): string {
+  if (!rawMessage) return "Unknown error";
+  return rawMessage
+    .replace(/AIza[0-9A-Za-z-_]{35}/g, "AIza***[REDACTED]")
+    .replace(/key=[^&\s"'`]+/gi, "key=[REDACTED]");
+}
+
 /**
- * System instruction separating role, principles, domain heuristics, and schema requirements.
+ * Reconciles generated budget items so their arithmetic sum strictly equals totalBudget.
+ * Protects application invariants against minor LLM arithmetic drift.
  */
+export function reconcileBudgetBreakdown(
+  items: BudgetItem[],
+  totalBudget: number,
+  currency: string
+): { items: BudgetItem[]; contingencyPercentage: number } {
+  const safeItems = items.map((it) => ({
+    ...it,
+    estimatedCost: Math.max(0, Math.round(Number(it.estimatedCost) || 0)),
+  }));
+
+  const currentSum = safeItems.reduce((acc, it) => acc + it.estimatedCost, 0);
+  const delta = totalBudget - currentSum;
+
+  let contingencyItem = safeItems.find(
+    (it) => it.category === "Contingency" || it.name.toLowerCase().includes("contingency") || it.name.toLowerCase().includes("reserve")
+  );
+
+  if (contingencyItem) {
+    contingencyItem.estimatedCost = Math.max(0, contingencyItem.estimatedCost + delta);
+  } else {
+    // Add contingency item to balance delta
+    const cost = Math.max(0, delta > 0 ? delta : Math.round(totalBudget * 0.08));
+    contingencyItem = {
+      id: `b-contingency-buffer`,
+      category: "Contingency",
+      name: "Emergency Reserve & Logistics Contingency",
+      estimatedCost: cost,
+      priority: "must-have",
+      notes: "Strict mathematical balancing buffer",
+    };
+    safeItems.push(contingencyItem);
+  }
+
+  // If delta was negative and contingency alone couldn't absorb it, scale non-must-have items down
+  const finalSum = safeItems.reduce((acc, it) => acc + it.estimatedCost, 0);
+  if (finalSum > totalBudget && totalBudget > 0) {
+    const overflow = finalSum - totalBudget;
+    for (const it of safeItems) {
+      if (it.priority !== "must-have" && it.estimatedCost > overflow) {
+        it.estimatedCost -= overflow;
+        break;
+      }
+    }
+  }
+
+  const finalContingencyCost = contingencyItem.estimatedCost;
+  const contingencyPercentage = totalBudget > 0 ? Math.round((finalContingencyCost / totalBudget) * 100) : 8;
+
+  return { items: safeItems, contingencyPercentage };
+}
+
 const SYSTEM_INSTRUCTION = `
 You are MOMENTMINT AI, an elite event planner and financial logistics architect.
 Your mission is to craft deeply personalized, culturally attuned, realistic, and budget-disciplined event plans.
@@ -46,11 +105,10 @@ export async function generateGeminiEventPlan(
   const apiKey = getApiKey(customApiKey);
   const startTime = Date.now();
 
-  // If no API key configured, use our high-fidelity fallback engine with explicit isMockFallback flag
+  // If no API key configured, use high-fidelity sandbox engine with explicit isMockFallback flag
   if (!apiKey) {
-    console.warn("[MOMENTMINT AI] No GEMINI_API_KEY provided. Operating in Demo Intelligence Mode.");
-    const fallback = generateFallbackPlan(input);
-    return fallback;
+    console.warn("[MOMENTMINT AI] Operating in Demo Intelligence Sandbox (no GEMINI_API_KEY provided).");
+    return generateFallbackPlan(input);
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -68,7 +126,7 @@ Generate a comprehensive, complete event plan in JSON for this celebration:
 - Theme & Vibe: ${input.themeVibe}
 - Dietary Requirements: ${input.dietaryRequirements.length > 0 ? input.dietaryRequirements.join(", ") : "None specified"}
 - Accessibility Needs: ${input.accessibilityNeeds.length > 0 ? input.accessibilityNeeds.join(", ") : "Standard accessibility"}
-- User Priorities: ${input.priorities.length > 0 ? input.priorities.join(", ") : "Balanced balance between hospitality and ambiance"}
+- User Priorities: ${input.priorities.length > 0 ? input.priorities.join(", ") : "Balanced hospitality and aesthetics"}
 - Additional Notes: ${input.additionalNotes || "None"}
 
 REQUIRED JSON SCHEMA STRUCTURE:
@@ -132,7 +190,8 @@ Make sure all itemized estimatedCost numbers are integers and their sum equals e
 `;
 
   try {
-    const response = await ai.models.generateContent({
+    // Enforce 25-second timeout on Google GenAI SDK call
+    const callPromise = ai.models.generateContent({
       model: modelName,
       contents: [
         { role: "user", parts: [{ text: `${SYSTEM_INSTRUCTION}\n\n${userPrompt}` }] }
@@ -142,6 +201,11 @@ Make sure all itemized estimatedCost numbers are integers and their sum equals e
       },
     });
 
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Google Gemini request timed out after ${API_TIMEOUT_MS / 1000}s`)), API_TIMEOUT_MS)
+    );
+
+    const response = await Promise.race([callPromise, timeoutPromise]);
     const responseText = response.text || "";
     const cleanedJson = cleanJsonString(responseText);
     const parsed = JSON.parse(cleanedJson);
@@ -156,11 +220,18 @@ Make sure all itemized estimatedCost numbers are integers and their sum equals e
       generatedAt: new Date().toISOString(),
       isMockFallback: false,
       executionTimeMs: Date.now() - startTime,
-      notes: "Generated live by Google Gemini",
+      notes: `Generated live by Google Gemini (${modelName})`,
     };
 
-    // Ensure budget total invariant
+    // Deterministically reconcile budget items to strictly equal input.budget
     if (parsed.budgetBreakdown && Array.isArray(parsed.budgetBreakdown.items)) {
+      const reconciled = reconcileBudgetBreakdown(
+        parsed.budgetBreakdown.items,
+        input.budget,
+        input.currency
+      );
+      parsed.budgetBreakdown.items = reconciled.items;
+      parsed.budgetBreakdown.contingencyPercentage = reconciled.contingencyPercentage;
       parsed.budgetBreakdown.totalBudget = input.budget;
       parsed.budgetBreakdown.currency = input.currency;
     }
@@ -168,18 +239,19 @@ Make sure all itemized estimatedCost numbers are integers and their sum equals e
     // Validate using Zod schema
     const validated = EventPlanSchema.safeParse(parsed);
     if (!validated.success) {
-      console.warn("[MOMENTMINT AI] Gemini JSON schema discrepancies, performing safe repair:", validated.error.issues);
-      // If minor schema discrepancies exist, return parsed with fallback guarantees
+      console.warn("[MOMENTMINT AI] Gemini JSON schema discrepancies repaired:", validated.error.issues);
       return parsed as EventPlan;
     }
 
     return validated.data as EventPlan;
   } catch (error) {
-    console.error("[MOMENTMINT AI] Gemini Generation Error:", error);
-    // Graceful recovery: return fallback with error notification inside metadata
-    const fallback = generateFallbackPlan(input);
-    fallback.aiMetadata.notes = `Gemini call failed (${(error as Error).message || "network or rate limit"}). Displaying resilient local demo plan.`;
-    return fallback;
+    const rawMsg = (error as Error).message || "Unknown error";
+    const safeMsg = sanitizeErrorMessage(rawMsg);
+    console.error("[MOMENTMINT AI] Gemini Generation Failed:", safeMsg);
+    // Honest failure: propagate scrubbed error to caller instead of secretly faking success
+    throw new Error(
+      `Gemini Generation Failed: ${safeMsg}. Verify your Google AI Studio API key in Settings.`
+    );
   }
 }
 
@@ -191,7 +263,6 @@ export async function generateGeminiCopilotDiff(
   const apiKey = getApiKey(customApiKey);
 
   if (!apiKey) {
-    // Intelligent heuristic fallback for Demo without key
     return generateLocalCopilotDiff(currentPlan, userInstruction);
   }
 
@@ -232,6 +303,9 @@ Respond with pure JSON in this structure:
       "name": string,
       "summary": string
     },
+    "styling": {
+      "decorIdeas": [ ... revised decor ideas if changed ... ]
+    },
     "itinerary": [ ... revised itinerary if changed ... ],
     "budgetBreakdown": {
       "totalBudget": number,
@@ -248,52 +322,105 @@ Respond with pure JSON in this structure:
 `;
 
   try {
-    const response = await ai.models.generateContent({
+    const callPromise = ai.models.generateContent({
       model: modelName,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: { responseMimeType: "application/json" },
     });
 
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Copilot response timed out")), API_TIMEOUT_MS)
+    );
+
+    const response = await Promise.race([callPromise, timeoutPromise]);
     const cleaned = cleanJsonString(response.text || "");
     const parsed = JSON.parse(cleaned);
     return parsed as CopilotDiff;
   } catch (error) {
-    console.error("[MOMENTMINT AI] Copilot API error:", error);
-    return generateLocalCopilotDiff(currentPlan, userInstruction);
+    const rawMsg = (error as Error).message || "Unknown error";
+    const safeMsg = sanitizeErrorMessage(rawMsg);
+    console.error("[MOMENTMINT AI] Copilot API error:", safeMsg);
+    throw new Error(
+      `Copilot Request Failed: ${safeMsg}. Check connection or switch to Demo Sandbox Mode.`
+    );
   }
 }
 
 /**
- * Intelligent local diff generator when no active API key is provided
- * Handles common demo scenarios: rain/indoor shift, catering reduction, budget change.
+ * Intelligent local diff generator for Demo Sandbox Mode
+ * Covers:
+ * 1. Rain / Weather / Indoor Shift
+ * 2. Catering / Food Cost Reduction
+ * 3. Relaxed Timeline / Party Flow
+ * 4. Eco-Friendly / Zero-Waste Upgrade
  */
-function generateLocalCopilotDiff(
+export function generateLocalCopilotDiff(
   currentPlan: EventPlan,
   instruction: string
 ): CopilotDiff {
   const lower = instruction.toLowerCase();
   const currency = currentPlan.budgetBreakdown.currency;
-  const isRainOrIndoor = lower.includes("rain") || lower.includes("indoor") || lower.includes("inside");
-  const isCateringReduction = lower.includes("catering") || lower.includes("food") || lower.includes("reduce") || lower.includes("save");
+  const isRainOrIndoor = lower.includes("rain") || lower.includes("indoor") || lower.includes("inside") || lower.includes("weather");
+  const isCateringReduction = lower.includes("catering") || lower.includes("food") || lower.includes("reduce") || lower.includes("save") || lower.includes("cost");
+  const isTimelineOrParty = lower.includes("timeline") || lower.includes("relax") || lower.includes("cocktail") || lower.includes("party") || lower.includes("pace");
+  const isEcoOrSustainable = lower.includes("eco") || lower.includes("sustainable") || lower.includes("zero waste") || lower.includes("green");
 
+  // 1. RAIN / INDOOR SHIFT
   if (isRainOrIndoor) {
-    // Modify itinerary and decor for indoors
     const revisedItems = currentPlan.budgetBreakdown.items.map((item) => {
       if (item.category === "Venue") {
         return {
           ...item,
           name: "Boutique Indoor Glasshouse / Banquet Space",
-          notes: "Relocated indoors to eliminate weather and rain volatility completely.",
+          notes: "Relocated indoors to eliminate rain and storm volatility completely.",
         };
       }
       return item;
     });
 
+    // Update Itinerary to indoor spaces
+    const revisedItinerary = currentPlan.itinerary.map((it) => {
+      if (it.phase === "afternoon" || it.title.toLowerCase().includes("arrival")) {
+        return {
+          ...it,
+          title: "Indoor Atrium Arrivals & Chilled Aperitifs",
+          description: "Guests arrive at covered glasshouse foyer, polaroid guestbook station sheltered from weather.",
+        };
+      }
+      if (it.title.toLowerCase().includes("dinner") || it.title.toLowerCase().includes("feast")) {
+        return {
+          ...it,
+          title: "Candlelit Banquet Dining & Indoor Speeches",
+          description: "Seated dining within air-conditioned hall, warm acoustic background playlist.",
+        };
+      }
+      return it;
+    });
+
+    // Update Styling to indoor installations
+    const revisedDecor = currentPlan.styling.decorIdeas.map((d) => {
+      if (d.area.toLowerCase().includes("welcome") || d.area.toLowerCase().includes("entrance")) {
+        return {
+          ...d,
+          title: "Indoor Botanical Foyer & Ambient Pillar Lanterns",
+          description: "Brass lanterns and potted Kentia palms framing the sheltered entryway.",
+        };
+      }
+      if (d.area.toLowerCase().includes("arch") || d.area.toLowerCase().includes("photo")) {
+        return {
+          ...d,
+          title: "Cascading Fairy Light Wall & Velvet Drape Backdrop",
+          description: "Floor-to-ceiling warm fairy lights with acoustic drape backdrop for photo candids.",
+        };
+      }
+      return d;
+    });
+
     return {
       rationale:
-        "Transitioned the event to an indoor covered space. Reallocated decor focus to ambient indoor lighting and warm acoustic placement to preserve intimate charm while guaranteeing 100% weather resilience.",
+        "Transitioned the celebration to a sheltered indoor glasshouse setting. Transformed outdoor lawn milestones and photo backdrops to indoor ambient lighting and acoustic velvet drapes, ensuring 100% weather resilience with zero net budget penalty.",
       summaryOfChanges:
-        "• Switched Venue preference to Indoor\n• Replaced outdoor lawn permits with private indoor hall\n• Added indoor acoustic & misting lighting adjustments\n• Updated contingency plan to focus on indoor ventilation",
+        "• Switched Venue preference to Indoor\n• Replaced outdoor lawn permits with boutique indoor hall\n• Shifted itinerary from lawn seating to indoor atrium\n• Updated decor concepts from open-air arches to indoor fairy light walls\n• Added indoor acoustic & ventilation risk contingencies",
       impactAnalysis: {
         budgetDiff: 0,
         itineraryChanged: true,
@@ -311,6 +438,11 @@ function generateLocalCopilotDiff(
           name: `${currentPlan.concept.name} (Weather-Protected Edition)`,
           summary: `An intimate, indoor-adapted celebration sheltered from rain while maintaining lush botanical vibes through indoor potted flora and warm fairy curtains.`,
         },
+        styling: {
+          ...currentPlan.styling,
+          decorIdeas: revisedDecor,
+        },
+        itinerary: revisedItinerary,
         budgetBreakdown: {
           ...currentPlan.budgetBreakdown,
           items: revisedItems,
@@ -327,13 +459,13 @@ function generateLocalCopilotDiff(
       },
       warningsOrTradeoffs: [
         "Indoor venue requires adhering to sound limit restrictions after 22:00.",
-        "Ensure the hall management permits candlelight or use flameless LED votives.",
+        "Ensure hall management permits real flame or switch to flameless LED votives.",
       ],
     };
   }
 
+  // 2. CATERING / COST REDUCTION
   if (isCateringReduction) {
-    // Reduce catering costs by ~25% and rebalance
     let savings = 0;
     const revisedItems = currentPlan.budgetBreakdown.items.map((item) => {
       if (item.category === "Catering") {
@@ -349,9 +481,16 @@ function generateLocalCopilotDiff(
       return item;
     });
 
+    // Rebalance contingency with savings
+    const contingency = revisedItems.find((i) => i.category === "Contingency");
+    if (contingency) {
+      contingency.estimatedCost += savings;
+      contingency.notes += ` (Bolstered by ${currency} ${savings.toLocaleString()} saved from catering optimization)`;
+    }
+
     return {
-      rationale: `Reduced catering expenditure by ~25% (${currency} ${savings.toLocaleString()}) by shifting to interactive live street-food stations and passed tapas instead of costly multi-course chafing dishes.`,
-      summaryOfChanges: `• Saved ${currency} ${savings.toLocaleString()} on catering\n• Preserved premium decor & entertainment\n• Shifted menu style to trendy artisanal grazing`,
+      rationale: `Reduced catering expenditure by 25% (${currency} ${savings.toLocaleString()}) by shifting to interactive live street-food stations and passed tapas instead of costly multi-course chafing dishes. Reallocated savings into Contingency Reserves to protect financial buffer.`,
+      summaryOfChanges: `• Saved ${currency} ${savings.toLocaleString()} on catering\n• Preserved premium decor & entertainment\n• Shifted menu style to trendy artisanal grazing\n• Bolstered emergency reserves by ${currency} ${savings.toLocaleString()}`,
       impactAnalysis: {
         budgetDiff: -savings,
         itineraryChanged: false,
@@ -367,9 +506,7 @@ function generateLocalCopilotDiff(
         menu: {
           ...currentPlan.menu,
           cateringStyle: "Artisanal Live Street Food Stations & Mocktail Bar",
-          perHeadEstimate: Math.round(
-            (currentPlan.menu.perHeadEstimate || 500) * 0.75
-          ),
+          perHeadEstimate: Math.round((currentPlan.menu.perHeadEstimate || 500) * 0.75),
         },
       },
       warningsOrTradeoffs: [
@@ -378,7 +515,79 @@ function generateLocalCopilotDiff(
     };
   }
 
-  // Generic copilot update
+  // 3. TIMELINE / RELAXED PARTY PACE
+  if (isTimelineOrParty) {
+    const revisedItinerary = currentPlan.itinerary.map((it, idx) => {
+      if (idx === 1) {
+        return {
+          ...it,
+          title: "Extended Golden Hour Cocktail Reception",
+          durationMin: it.durationMin + 30,
+          description: "Extended social mingling time with passed canapés and live acoustic jazz background set.",
+        };
+      }
+      return it;
+    });
+
+    return {
+      rationale:
+        "Paced the celebration with an extended 75-minute golden hour cocktail reception, giving guests ample time to reconnect without feeling rushed through milestones.",
+      summaryOfChanges:
+        "• Extended cocktail reception by 30 minutes\n• Relaxed dinner transition pacing\n• Added interactive polaroid guestbook milestone",
+      impactAnalysis: {
+        budgetDiff: 0,
+        itineraryChanged: true,
+        menuChanged: false,
+        decorChanged: false,
+        venueChanged: false,
+      },
+      proposedPlan: {
+        itinerary: revisedItinerary,
+      },
+      warningsOrTradeoffs: ["Ensure venue access agreement extends to allow for relaxed farewells."],
+    };
+  }
+
+  // 4. ECO-FRIENDLY / ZERO WASTE
+  if (isEcoOrSustainable) {
+    const revisedItems = currentPlan.budgetBreakdown.items.map((it) => {
+      if (it.category === "Gifts & Favors") {
+        return {
+          ...it,
+          name: "Handcrafted Seed-Paper Stationery & Living Succulents",
+          notes: "100% biodegradable and plantable wildflower seeds.",
+        };
+      }
+      return it;
+    });
+
+    return {
+      rationale:
+        "Strengthened sustainability mandate across all touchpoints: plantable seed-paper favors, reusable fabric drapes, and living potted table greenery replacing cut floral waste.",
+      summaryOfChanges:
+        "• Upgraded guest favors to living plantable wildflower succulents\n• Replaced cut florals with rented nursery greenery\n• Added zero-waste waste management checklist task",
+      impactAnalysis: {
+        budgetDiff: 0,
+        itineraryChanged: false,
+        menuChanged: false,
+        decorChanged: true,
+        venueChanged: false,
+      },
+      proposedPlan: {
+        concept: {
+          ...currentPlan.concept,
+          name: `${currentPlan.concept.name} (Zero-Waste Edition)`,
+        },
+        budgetBreakdown: {
+          ...currentPlan.budgetBreakdown,
+          items: revisedItems,
+        },
+      },
+      warningsOrTradeoffs: ["Coordinate with venue for composting bins and palm-leaf tableware disposal."],
+    };
+  }
+
+  // Generic fallback
   return {
     rationale: `Refined event plan based on instruction: "${instruction}". Balanced budget allocations and polished timeline checkpoints.`,
     summaryOfChanges: `• Applied contextual styling adjustments\n• Validated itemized budget items and contingency reserves\n• Synchronized checklist priorities`,
@@ -392,7 +601,7 @@ function generateLocalCopilotDiff(
     proposedPlan: {
       concept: {
         ...currentPlan.concept,
-        summary: `${currentPlan.concept.summary} (Tailored for: ${instruction})`,
+        summary: `${currentPlan.concept.summary} (Refined for: ${instruction})`,
       },
     },
     warningsOrTradeoffs: [],

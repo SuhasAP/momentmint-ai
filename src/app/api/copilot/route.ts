@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CopilotRequestSchema } from "@/lib/schemas";
-import { generateGeminiCopilotDiff } from "@/lib/gemini";
+import { generateGeminiCopilotDiff, sanitizeErrorMessage } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,11 +22,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, diff });
   } catch (error) {
-    console.error("[API] Error in /api/copilot:", error);
+    const safeMsg = sanitizeErrorMessage((error as Error).message || "Unknown error occurred");
+    console.error("[API] Error in /api/copilot:", safeMsg);
     return NextResponse.json(
       {
         error: "Failed to process copilot instruction",
-        message: (error as Error).message || "Unknown error occurred",
+        message: safeMsg,
       },
       { status: 500 }
     );

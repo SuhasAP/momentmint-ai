@@ -146,13 +146,29 @@ export function generateFallbackPlan(input: EventInput): EventPlan {
       aestheticKeywords: ["Botanical", "Warm Ivory", "Terracotta", "Intimate", "Zero-Waste"],
     },
     styling: {
-      colorPalette: [
-        { name: "Warm Ivory", hex: "#FAF8F0", usage: "Linen table overlays and entrance drapery" },
-        { name: "Forest Sage", hex: "#4A6B53", usage: "Living potted botanicals and eucalyptus runner" },
-        { name: "Terracotta Coral", hex: "#E07A5F", usage: "Handmade ceramic pottery and menu stationery" },
-        { name: "Midnight Indigo", hex: "#1A2536", usage: "Typography, signage frames, and accent lanterns" },
-        { name: "Soft Amber", hex: "#F4A261", usage: "Warm 2700K fairy lights and candle glow" },
-      ],
+      colorPalette: input.city.toLowerCase().includes("goa") || input.themeVibe.toLowerCase().includes("coastal") || input.themeVibe.toLowerCase().includes("tropical")
+        ? [
+            { name: "Ocean Teal", hex: "#2A9D8F", usage: "Draped fabrics and runner textiles" },
+            { name: "Sunset Terracotta", hex: "#E76F51", usage: "Handmade clay vessels & centerpieces" },
+            { name: "Golden Dune", hex: "#E9C46A", usage: "Warm lighting votives and ambient glow" },
+            { name: "Deep Coast Navy", hex: "#264653", usage: "Signage frames and evening lanterns" },
+            { name: "Warm Shell", hex: "#FDFBF7", usage: "Linen overlays and parchment stationery" },
+          ]
+        : input.eventType === "corporate" || input.themeVibe.toLowerCase().includes("tech")
+        ? [
+            { name: "Deep Obsidian", hex: "#0F172A", usage: "Stage backdrop and digital displays" },
+            { name: "Electric Indigo", hex: "#6366F1", usage: "Ambient LED uplighting wash" },
+            { name: "Neon Cyan", hex: "#38BDF8", usage: "Badge accents and digital kiosks" },
+            { name: "Clean Slate", hex: "#F1F5F9", usage: "Stationery and presentation materials" },
+            { name: "Midnight Steel", hex: "#334155", usage: "Furniture frames and booth piping" },
+          ]
+        : [
+            { name: "Warm Ivory", hex: "#FAF8F0", usage: "Linen table overlays and entrance drapery" },
+            { name: "Forest Sage", hex: "#4A6B53", usage: "Living potted botanicals and eucalyptus runner" },
+            { name: "Terracotta Coral", hex: "#E07A5F", usage: "Handmade ceramic pottery and menu stationery" },
+            { name: "Midnight Indigo", hex: "#1A2536", usage: "Typography, signage frames, and accent lanterns" },
+            { name: "Soft Amber", hex: "#F4A261", usage: "Warm 2700K fairy lights and candle glow" },
+          ],
       decorIdeas: [
         {
           id: "dec-1",

@@ -58,8 +58,11 @@ export default function Home() {
     }
   };
 
+  const [generationError, setGenerationError] = useState<string | null>(null);
+
   const handleGeneratePlan = async (input: EventInput) => {
     setIsGenerating(true);
+    setGenerationError(null);
     try {
       const response = await fetch("/api/generate-plan", {
         method: "POST",
@@ -69,7 +72,7 @@ export default function Home() {
 
       const data = await response.json();
       if (!response.ok || !data.success || !data.plan) {
-        throw new Error(data.message || data.error || "Generation error");
+        throw new Error(data.message || data.error || "Generation request failed");
       }
 
       const newPlan: EventPlan = data.plan;
@@ -78,6 +81,7 @@ export default function Home() {
       setSavedEvents(updatedList);
       setActivePlan(newPlan);
       setIsWizardOpen(false);
+      setGenerationError(null);
 
       // Trigger celebratory confetti
       try {
@@ -91,15 +95,20 @@ export default function Home() {
         // Safe confetti fallback
       }
     } catch (err) {
-      console.warn("API route failed, using resilient local generator:", err);
-      const fallback = generateFallbackPlan(input);
-      saveEvent(fallback);
-      setSavedEvents(loadSavedEvents());
-      setActivePlan(fallback);
-      setIsWizardOpen(false);
+      console.error("[MOMENTMINT AI] Plan Generation Error:", err);
+      setGenerationError((err as Error).message || "Generation failed. Please verify your Gemini API key in Settings or continue in Demo Sandbox Mode.");
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleGenerateDemo = (input: EventInput) => {
+    const fallback = generateFallbackPlan(input);
+    saveEvent(fallback);
+    setSavedEvents(loadSavedEvents());
+    setActivePlan(fallback);
+    setIsWizardOpen(false);
+    setGenerationError(null);
   };
 
   const handleUpdatePlan = (updated: EventPlan) => {
@@ -155,8 +164,15 @@ export default function Home() {
           <EventWizard
             onGenerate={handleGeneratePlan}
             isGenerating={isGenerating}
-            onCancel={() => setIsWizardOpen(false)}
+            onCancel={() => {
+              setIsWizardOpen(false);
+              setGenerationError(null);
+            }}
             initialPreset={initialPreset}
+            generationError={generationError}
+            onClearError={() => setGenerationError(null)}
+            onGenerateDemo={handleGenerateDemo}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
         ) : activePlan ? (
           <EventDashboard

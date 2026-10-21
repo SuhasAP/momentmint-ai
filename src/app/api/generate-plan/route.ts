@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EventInputSchema } from "@/lib/schemas";
-import { generateGeminiEventPlan } from "@/lib/gemini";
+import { generateGeminiEventPlan, sanitizeErrorMessage } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,11 +21,12 @@ export async function POST(req: NextRequest) {
     const plan = await generateGeminiEventPlan(validationResult.data, apiKey);
     return NextResponse.json({ success: true, plan });
   } catch (error) {
-    console.error("[API] Error in /api/generate-plan:", error);
+    const safeMsg = sanitizeErrorMessage((error as Error).message || "Unknown error occurred");
+    console.error("[API] Error in /api/generate-plan:", safeMsg);
     return NextResponse.json(
       {
         error: "Failed to generate event plan",
-        message: (error as Error).message || "Unknown error occurred",
+        message: safeMsg,
       },
       { status: 500 }
     );

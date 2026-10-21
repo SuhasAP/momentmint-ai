@@ -1,58 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 48 33% 97%; /* #FAF9F5 Warm Ivory */
-    --foreground: 222 47% 11%; /* #0F172A Midnight Navy */
+    --background: 44 29% 96%; /* #F8F6F0 Warm Porcelain */
+    --foreground: 108 11% 14%; /* #222820 Charcoal */
   }
 
   body {
-    background-color: #FAF9F5;
-    color: #0F172A;
+    background-color: #F8F6F0;
+    color: #222820;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: 'Cormorant Garamond', Georgia, serif;
   }
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #F5F1E5;
+  background: #F0ECE1;
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: #D8C7A5;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: #B6644B;
 }
 
-/* Glass & Card styles */
+/* Studio Design Language */
+.studio-card {
+  background: #FFFFFF;
+  border: 1px solid #E7E3D9;
+  border-radius: 1.25rem;
+  box-shadow: 0 2px 16px -2px rgba(23, 55, 43, 0.04), 0 1px 4px -1px rgba(23, 55, 43, 0.02);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.studio-card:hover {
+  border-color: #D8C7A5;
+  box-shadow: 0 10px 30px -4px rgba(23, 55, 43, 0.07), 0 3px 8px -2px rgba(23, 55, 43, 0.03);
+}
+
 .momentmint-card {
   background: #FFFFFF;
-  border: 1px solid #EFECE1;
-  border-radius: 1rem;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
-  transition: all 0.2s ease-in-out;
+  border: 1px solid #E7E3D9;
+  border-radius: 1.25rem;
+  box-shadow: 0 2px 16px -2px rgba(23, 55, 43, 0.04);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .momentmint-card:hover {
-  border-color: #E2D9C3;
-  box-shadow: 0 10px 25px -3px rgba(15, 23, 42, 0.07), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
+  border-color: #D8C7A5;
+  box-shadow: 0 10px 30px -4px rgba(23, 55, 43, 0.07);
 }
 
-.glow-pill-coral {
-  box-shadow: 0 0 16px -2px rgba(244, 63, 94, 0.35);
-}
-
-.glow-pill-violet {
-  box-shadow: 0 0 16px -2px rgba(99, 102, 241, 0.35);
+/* Selection */
+::selection {
+  background-color: #DCE5D8;
+  color: #17372B;
 }
 
 /* Print Styles */
