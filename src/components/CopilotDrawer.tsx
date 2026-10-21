@@ -18,6 +18,7 @@ import {
 import { EventPlan, CopilotDiff } from "@/types/event";
 import { formatCurrency } from "@/lib/budget-math";
 import { getStoredModel } from "@/lib/storage";
+import { generateLocalCopilotDiff } from "@/lib/gemini";
 
 interface CopilotDrawerProps {
   isOpen: boolean;
@@ -185,11 +186,29 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
 
         {/* Error notification */}
         {error && (
-          <div className="p-4 rounded-xl bg-[#FAF1EE] border border-[#C87960]/30 text-xs text-[#C87960] flex items-start space-x-2">
+          <div className="p-4 rounded-xl bg-[#FAF1EE] border border-[#C87960]/30 text-xs text-[#C87960] flex items-start space-x-2.5 animate-fade-in">
             <AlertTriangle className="w-4 h-4 text-[#C87960] flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">Copilot Consultation Notice</p>
-              <p>{error}</p>
+            <div className="space-y-1.5 flex-1">
+              <p className="font-bold text-[#17372B]">Copilot Notice</p>
+              <p className="text-[#222820] leading-relaxed">{error}</p>
+              <div className="pt-1 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleSend()}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E7E3D9] text-[#17372B] font-semibold hover:bg-[#FAF7F1] transition-colors"
+                >
+                  Retry Request
+                </button>
+                <button
+                  onClick={() => {
+                    const fallback = generateLocalCopilotDiff(currentPlan, instruction || "Revise event plan");
+                    setDiff(fallback);
+                    setError(null);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-[#DCE5D8] text-[#17372B] font-semibold hover:bg-[#c9dac4] transition-colors"
+                >
+                  Switch to Demo Sandbox
+                </button>
+              </div>
             </div>
           </div>
         )}

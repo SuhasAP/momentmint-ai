@@ -40,7 +40,58 @@ export function resolveGeminiModel(customModel?: string): string {
   return DEFAULT_MODEL;
 }
 
-const API_TIMEOUT_MS = 25000;
+export const ATTEMPT_TIMEOUT_MS = 12000; // 12 seconds per call
+export const RETRY_DELAY_MS = 1000; // 1 second short delay for transient errors
+export const MAX_RETRY_ATTEMPTS = 2; // initial try + at most 1 bounded retry
+
+export function isTransientGeminiError(error: unknown): boolean {
+  if (!error) return false;
+  const msg = ((error as Error).message || String(error)).toLowerCase();
+  const status = (error as { status?: number; statusCode?: number }).status ||
+                 (error as { status?: number; statusCode?: number }).statusCode;
+
+  // Explicit transient status codes
+  if (status === 503 || status === 429 || status === 504) {
+    return true;
+  }
+
+  // Explicit non-transient status codes
+  if (status === 400 || status === 401 || status === 403 || status === 404) {
+    return false;
+  }
+
+  // Never retry explicit client-side errors
+  if (
+    msg.includes("400") ||
+    msg.includes("401") ||
+    msg.includes("403") ||
+    msg.includes("404") ||
+    msg.includes("api key not valid") ||
+    msg.includes("api_key_invalid") ||
+    msg.includes("invalid argument") ||
+    msg.includes("not found") ||
+    msg.includes("bad request")
+  ) {
+    return false;
+  }
+
+  // Transient signals
+  return (
+    msg.includes("503") ||
+    msg.includes("unavailable") ||
+    msg.includes("high demand") ||
+    msg.includes("overloaded") ||
+    msg.includes("temporarily unavailable") ||
+    msg.includes("rate limit") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("429") ||
+    msg.includes("timed out") ||
+    msg.includes("timeout") ||
+    msg.includes("fetch failed") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout")
+  );
+}
 
 function getApiKey(customKey?: string): string | undefined {
   if (customKey && customKey.trim().length > 5) {
@@ -63,7 +114,60 @@ export function sanitizeErrorMessage(rawMessage: string): string {
   if (!rawMessage) return "Unknown error";
   return rawMessage
     .replace(/AIza[0-9A-Za-z-_]{35}/g, "AIza***[REDACTED]")
-    .replace(/key=[^&\s"'`]+/gi, "key=[REDACTED]");
+    .replace(/key=[^&\s"'`]+/gi, "key=[REDACTED]")
+    .replace(/(?:bearer|token)\s+[a-zA-Z0-9_\-\.]+/gi, "bearer [REDACTED]")
+    .replace(/x-goog-api-key:\s*[^\s]+/gi, "x-goog-api-key: [REDACTED]");
+}
+
+/**
+ * Executes an async action with an AbortSignal timeout and bounded retry for transient errors.
+ * Ensures the underlying HTTP socket is aborted upon timeout rather than orphaned.
+ */
+export async function executeWithTransientRetry<T>(
+  action: (signal: AbortSignal) => Promise<T>,
+  options?: {
+    attemptTimeoutMs?: number;
+    retryDelayMs?: number;
+    maxAttempts?: number;
+    operationName?: string;
+  }
+): Promise<T> {
+  const attemptTimeoutMs = options?.attemptTimeoutMs ?? ATTEMPT_TIMEOUT_MS;
+  const retryDelayMs = options?.retryDelayMs ?? RETRY_DELAY_MS;
+  const maxAttempts = options?.maxAttempts ?? MAX_RETRY_ATTEMPTS;
+  const opName = options?.operationName ?? "Gemini API";
+
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new Error(`${opName} timed out after ${attemptTimeoutMs / 1000}s`));
+    }, attemptTimeoutMs);
+
+    try {
+      const result = await action(controller.signal);
+      clearTimeout(timer);
+      return result;
+    } catch (error) {
+      clearTimeout(timer);
+      lastError = error;
+      const isTransient = isTransientGeminiError(error);
+
+      if (attempt < maxAttempts && isTransient) {
+        console.warn(
+          `[MOMENTMINT AI] Transient error on ${opName} attempt ${attempt} (${sanitizeErrorMessage(
+            (error as Error).message || ""
+          )}). Retrying in ${retryDelayMs}ms...`
+        );
+        await new Promise((res) => setTimeout(res, retryDelayMs));
+        continue;
+      }
+      break;
+    }
+  }
+
+  throw lastError;
 }
 
 /**
@@ -227,68 +331,93 @@ Make sure all itemized estimatedCost numbers are integers and their sum equals e
 `;
 
   try {
-    // Enforce 25-second timeout on Google GenAI SDK call
-    const callPromise = ai.models.generateContent({
-      model: modelName,
-      contents: [
-        { role: "user", parts: [{ text: `${SYSTEM_INSTRUCTION}\n\n${userPrompt}` }] }
-      ],
-      config: {
-        responseMimeType: "application/json",
+    const parsed = await executeWithTransientRetry(
+      async (signal) => {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            { role: "user", parts: [{ text: `${SYSTEM_INSTRUCTION}\n\n${userPrompt}` }] }
+          ],
+          config: {
+            responseMimeType: "application/json",
+            abortSignal: signal,
+          },
+        });
+        const responseText = response.text || "";
+        const cleanedJson = cleanJsonString(responseText);
+        return JSON.parse(cleanedJson);
       },
-    });
-
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Google Gemini request timed out after ${API_TIMEOUT_MS / 1000}s`)), API_TIMEOUT_MS)
+      {
+        attemptTimeoutMs: ATTEMPT_TIMEOUT_MS,
+        retryDelayMs: RETRY_DELAY_MS,
+        maxAttempts: MAX_RETRY_ATTEMPTS,
+        operationName: "Plan Generation",
+      }
     );
 
-    const response = await Promise.race([callPromise, timeoutPromise]);
-    const responseText = response.text || "";
-    const cleanedJson = cleanJsonString(responseText);
-    const parsed = JSON.parse(cleanedJson);
+      // Attach input & execution metadata
+      parsed.id = parsed.id || `plan-${Date.now()}`;
+      parsed.input = input;
+      parsed.createdAt = new Date().toISOString();
+      parsed.updatedAt = new Date().toISOString();
+      parsed.aiMetadata = {
+        model: modelName,
+        generatedAt: new Date().toISOString(),
+        isMockFallback: false,
+        executionTimeMs: Date.now() - startTime,
+        notes: `Generated live by Google Gemini (${modelName})`,
+      };
 
-    // Attach input & execution metadata
-    parsed.id = parsed.id || `plan-${Date.now()}`;
-    parsed.input = input;
-    parsed.createdAt = new Date().toISOString();
-    parsed.updatedAt = new Date().toISOString();
-    parsed.aiMetadata = {
-      model: modelName,
-      generatedAt: new Date().toISOString(),
-      isMockFallback: false,
-      executionTimeMs: Date.now() - startTime,
-      notes: `Generated live by Google Gemini (${modelName})`,
-    };
+      // Deterministically reconcile budget items to strictly equal input.budget
+      if (parsed.budgetBreakdown && Array.isArray(parsed.budgetBreakdown.items)) {
+        const reconciled = reconcileBudgetBreakdown(
+          parsed.budgetBreakdown.items,
+          input.budget,
+          input.currency
+        );
+        parsed.budgetBreakdown.items = reconciled.items;
+        parsed.budgetBreakdown.contingencyPercentage = reconciled.contingencyPercentage;
+        parsed.budgetBreakdown.totalBudget = input.budget;
+        parsed.budgetBreakdown.currency = input.currency;
+      }
 
-    // Deterministically reconcile budget items to strictly equal input.budget
-    if (parsed.budgetBreakdown && Array.isArray(parsed.budgetBreakdown.items)) {
-      const reconciled = reconcileBudgetBreakdown(
-        parsed.budgetBreakdown.items,
-        input.budget,
-        input.currency
-      );
-      parsed.budgetBreakdown.items = reconciled.items;
-      parsed.budgetBreakdown.contingencyPercentage = reconciled.contingencyPercentage;
-      parsed.budgetBreakdown.totalBudget = input.budget;
-      parsed.budgetBreakdown.currency = input.currency;
-    }
+      // Validate using Zod schema
+      const validated = EventPlanSchema.safeParse(parsed);
+      if (!validated.success) {
+        console.warn("[MOMENTMINT AI] Gemini JSON schema discrepancies repaired:", validated.error.issues);
+        return parsed as EventPlan;
+      }
 
-    // Validate using Zod schema
-    const validated = EventPlanSchema.safeParse(parsed);
-    if (!validated.success) {
-      console.warn("[MOMENTMINT AI] Gemini JSON schema discrepancies repaired:", validated.error.issues);
-      return parsed as EventPlan;
-    }
-
-    return validated.data as EventPlan;
+      return validated.data as EventPlan;
   } catch (error) {
-    const rawMsg = (error as Error).message || "Unknown error";
+    const rawMsg = (error as Error)?.message || "Unknown error";
     const safeMsg = sanitizeErrorMessage(rawMsg);
     console.error("[MOMENTMINT AI] Gemini Generation Failed:", safeMsg);
-    // Honest failure: propagate scrubbed error to caller instead of secretly faking success
+
+  if (
+    safeMsg.includes("503") ||
+    safeMsg.includes("UNAVAILABLE") ||
+    safeMsg.includes("high demand") ||
+    safeMsg.includes("overloaded")
+  ) {
     throw new Error(
-      `Gemini Generation Failed: ${safeMsg}. Verify your Google AI Studio API key in Settings.`
+      "Google Gemini model is currently experiencing high demand (503). Please retry in a moment or evaluate with Demo Sandbox Mode."
     );
+  }
+  if (safeMsg.includes("timed out") || safeMsg.includes("timeout")) {
+    throw new Error(
+      "Google Gemini request timed out due to high upstream traffic. Please try again or evaluate with Demo Sandbox Mode."
+    );
+  }
+  if (safeMsg.includes("429") || safeMsg.includes("RESOURCE_EXHAUSTED")) {
+    throw new Error(
+      "Google Gemini rate limit reached (429). Please wait a moment before trying again, or evaluate with Demo Sandbox Mode."
+    );
+  }
+
+  throw new Error(
+    `Gemini Generation Failed: ${safeMsg}. Verify your Google AI Studio API key in Settings or evaluate with Demo Sandbox Mode.`
+  );
   }
 }
 
@@ -360,27 +489,57 @@ Respond with pure JSON in this structure:
 `;
 
   try {
-    const callPromise = ai.models.generateContent({
-      model: modelName,
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: { responseMimeType: "application/json" },
-    });
-
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Copilot response timed out")), API_TIMEOUT_MS)
+    const parsed = await executeWithTransientRetry(
+      async (signal) => {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          config: {
+            responseMimeType: "application/json",
+            abortSignal: signal,
+          },
+        });
+        const cleaned = cleanJsonString(response.text || "");
+        return JSON.parse(cleaned) as CopilotDiff;
+      },
+      {
+        attemptTimeoutMs: ATTEMPT_TIMEOUT_MS,
+        retryDelayMs: RETRY_DELAY_MS,
+        maxAttempts: MAX_RETRY_ATTEMPTS,
+        operationName: "Copilot",
+      }
     );
 
-    const response = await Promise.race([callPromise, timeoutPromise]);
-    const cleaned = cleanJsonString(response.text || "");
-    const parsed = JSON.parse(cleaned);
-    return parsed as CopilotDiff;
+    return parsed;
   } catch (error) {
     const rawMsg = (error as Error).message || "Unknown error";
     const safeMsg = sanitizeErrorMessage(rawMsg);
-    console.error("[MOMENTMINT AI] Copilot API error:", safeMsg);
+    console.error("[MOMENTMINT AI] Copilot API error after retry evaluation:", safeMsg);
+
+  if (
+    safeMsg.includes("503") ||
+    safeMsg.includes("UNAVAILABLE") ||
+    safeMsg.includes("high demand") ||
+    safeMsg.includes("overloaded")
+  ) {
     throw new Error(
-      `Copilot Request Failed: ${safeMsg}. Check connection or switch to Demo Sandbox Mode.`
+      "Google Gemini model is currently experiencing high demand (503). Please retry in a moment or switch to Demo Sandbox Mode."
     );
+  }
+  if (safeMsg.includes("timed out") || safeMsg.includes("timeout")) {
+    throw new Error(
+      "Copilot request timed out due to high upstream traffic. Please try again or switch to Demo Sandbox Mode."
+    );
+  }
+  if (safeMsg.includes("429") || safeMsg.includes("RESOURCE_EXHAUSTED")) {
+    throw new Error(
+      "Gemini API rate limit reached (429). Please wait a moment before trying again, or switch to Demo Sandbox Mode."
+    );
+  }
+
+  throw new Error(
+    `Copilot Request Failed: ${safeMsg}. Check connection or switch to Demo Sandbox Mode.`
+  );
   }
 }
 
