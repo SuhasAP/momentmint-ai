@@ -155,3 +155,5 @@ Traditional event planners rely on rigid questionnaire templates with hardcoded 
 1. **Vendor Quotations**: To preserve honesty and avoid hallucinated promises, vendor suggestions are strictly labeled as **Discovery Leads** with typical market ranges and vetting questions. Real booked vendors can be added and verified manually.
 2. **Deterministic Arithmetic Boundary**: LLMs are notoriously prone to math errors; therefore, Gemini is never trusted for final financial calculations. All sums, remaining balances, and percentages are computed deterministically by `src/lib/budget-math.ts`.
 3. **Browser Storage**: Prototype persistence uses browser `localStorage`. For multi-user enterprise deployments, a PostgreSQL or Supabase backend can be connected via Prisma/Drizzle.
+
+Deployment attribution update.
