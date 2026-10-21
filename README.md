@@ -157,3 +157,5 @@ Traditional event planners rely on rigid questionnaire templates with hardcoded 
 3. **Browser Storage**: Prototype persistence uses browser `localStorage`. For multi-user enterprise deployments, a PostgreSQL or Supabase backend can be connected via Prisma/Drizzle.
 
 Deployment attribution update.
+
+Verified deployment author email.
