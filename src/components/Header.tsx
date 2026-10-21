@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             />
             <span className="tracking-wide">
-              {apiKeyConfigured ? "Gemini 2.5 Active" : "Demo Sandbox (Add Key)"}
+              {apiKeyConfigured ? "Gemini AI" : "Demo Sandbox (Add Key)"}
             </span>
           </button>
 

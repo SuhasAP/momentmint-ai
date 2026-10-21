@@ -31,7 +31,7 @@ At its heart lies a **Live Conversational Event Copilot** powered by **Google Ge
 - **Priority-Protected Cost Optimizer**: An AI/algorithmic assistant that identifies discretionary savings on "splurge" and "nice-to-have" items while strictly shielding all "must-have" items.
 
 ### 3. Conversational Event Copilot
-- **Trade-Off Reasoning**: Natural language prompt processing through Google Gemini (`gemini-2.5-flash` or `gemini-1.5-flash`).
+- **Trade-Off Reasoning**: Natural language prompt processing through Google Gemini (`gemini-3.8-flash` or `gemini-2.5-flash`).
 - **Structured Before/After Diffs**: Evaluates the impact on budget diffs, venue transitions, itinerary pacing, and menu adaptations.
 - **Atomic Plan Updates**: Users can review strategic rationales and warnings, then click **Apply to Live Plan** to atomically update the underlying event state and recalculate all financial constraints.
 
@@ -118,7 +118,7 @@ At its heart lies a **Live Conversational Event Copilot** powered by **Google Ge
    Add your Google AI Studio Gemini API Key:
    ```env
    GEMINI_API_KEY=your_actual_gemini_api_key_here
-   GEMINI_MODEL=gemini-2.5-flash
+   GEMINI_MODEL=gemini-3.8-flash
    ```
    *(Note: You can also enter or switch your Gemini API key directly inside the running application via the Settings dialog, or test the application in Demo Sandbox Mode without an API key).*
 

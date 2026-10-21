@@ -3,7 +3,7 @@ import { EventInput, EventPlan, CopilotDiff, BudgetItem, BudgetBreakdown } from 
 import { EventPlanSchema } from "@/lib/schemas";
 import { generateFallbackPlan } from "@/lib/sample-data";
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const API_TIMEOUT_MS = 25000;
 
 function getApiKey(customKey?: string): string | undefined {

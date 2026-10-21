@@ -16,7 +16,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onKeyUpdated,
 }) => {
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("gemini-2.5-flash");
+  const [model, setModel] = useState("gemini-3.8-flash");
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
@@ -111,7 +111,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-[#F8F6F0] border border-[#E7E3D9] rounded-xl text-sm font-medium text-[#17372B] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#214737]"
               >
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended - Fastest & High Quality)</option>
+                <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended - Fastest & High Quality)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                 <option value="gemini-1.5-flash">Gemini 1.5 Flash (Supported General Purpose)</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
               </select>
